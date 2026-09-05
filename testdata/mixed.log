@@ -1,0 +1,5 @@
+2024-03-01T09:00:00Z INFO start
+not a timestamp line here
+2024-03-01T09:05:00Z INFO after gap
+another garbage line
+2024-03-01T09:05:01Z INFO tiny
