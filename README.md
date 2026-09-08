@@ -27,6 +27,13 @@ journalctl -u myservice --since today | loggap --min-gap 1m
 - `--min-gap DURATION` - smallest gap worth reporting (default `30s`).
   Accepts anything `time.ParseDuration` does: `10s`, `2m`, `1h30m`.
 - `--json` - print the report as JSON instead of plain text.
+- `--format LAYOUT` - a Go reference layout (the `Mon Jan 2 15:04:05 2006`
+  style, built around the reference time `2006-01-02T15:04:05Z07:00`) for
+  timestamps that don't match any built-in format. Tried at the start of
+  each line only after all built-in formats have failed to match, so it
+  never overrides them. If the layout has no year (like syslog), `loggap`
+  assumes the current year and corrects for a log that rolled over a year
+  boundary, the same way it does for the built-in syslog format.
 
 ### Example
 
@@ -83,8 +90,15 @@ incident.
   `loggap` assumes the current year, correcting for the case where the log
   rolled over a year boundary
 
-Lines that don't match any of these are counted but otherwise ignored;
-they don't break the gap calculation, they're just skipped.
+Lines that don't match any of these, and don't match `--format` when it's
+given, are counted but otherwise ignored; they don't break the gap
+calculation, they're just skipped.
+
+For example, a log written as `2024.03.01-09:00:00 ...` needs:
+
+```
+loggap --format "2006.01.02-15:04:05" service.log
+```
 
 ## Install
 

@@ -34,6 +34,7 @@ type report struct {
 func main() {
 	jsonOutput := flag.Bool("json", false, "print results as JSON instead of plain text")
 	minGap := flag.Duration("min-gap", 30*time.Second, "smallest gap worth reporting (e.g. 30s, 5m)")
+	format := flag.String("format", "", "Go reference layout for logs that don't match a built-in timestamp format (e.g. \"2006-01-02 15:04:05\")")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: loggap [flags] [file]\n\n")
 		fmt.Fprintf(os.Stderr, "Find gaps in time between consecutive timestamped log lines.\n")
@@ -54,7 +55,7 @@ func main() {
 	}
 	defer r.Close()
 
-	rep, err := scan(r, path, *minGap)
+	rep, err := scan(r, path, *minGap, *format)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "loggap: %v\n", err)
 		os.Exit(1)
@@ -78,7 +79,7 @@ func openInput(path string) (io.ReadCloser, error) {
 	return f, nil
 }
 
-func scan(r io.Reader, path string, minGap time.Duration) (*report, error) {
+func scan(r io.Reader, path string, minGap time.Duration, customLayout string) (*report, error) {
 	rep := &report{
 		File:          path,
 		MinGapSeconds: minGap.Seconds(),
@@ -101,7 +102,7 @@ func scan(r io.Reader, path string, minGap time.Duration) (*report, error) {
 		rep.LinesScanned++
 		line := scanner.Text()
 
-		t, ok := extractTimestamp(line, now)
+		t, ok := extractTimestamp(line, now, customLayout)
 		if !ok {
 			continue
 		}

@@ -10,10 +10,11 @@ func TestExtractTimestamp(t *testing.T) {
 	now := time.Date(2024, 3, 15, 12, 0, 0, 0, time.UTC)
 
 	cases := []struct {
-		name string
-		line string
-		want time.Time
-		ok   bool
+		name         string
+		line         string
+		customLayout string
+		want         time.Time
+		ok           bool
 	}{
 		{
 			name: "rfc3339 with Z",
@@ -66,6 +67,33 @@ func TestExtractTimestamp(t *testing.T) {
 			line: "INFO 2024-03-01T09:00:00Z starting up",
 			ok:   false,
 		},
+		{
+			name:         "custom format with year, unmatched by any built-in",
+			line:         "2024.03.01-09:00:00 INFO starting up",
+			customLayout: "2006.01.02-15:04:05",
+			want:         time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC),
+			ok:           true,
+		},
+		{
+			name:         "custom format with no year, current year assumed",
+			line:         "01-Mar 09:00:00 INFO starting up",
+			customLayout: "02-Jan 15:04:05",
+			want:         time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC),
+			ok:           true,
+		},
+		{
+			name:         "custom format is ignored when a built-in format already matches",
+			line:         "2024-03-01T09:00:00Z INFO starting up",
+			customLayout: "02-Jan 15:04:05",
+			want:         time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC),
+			ok:           true,
+		},
+		{
+			name:         "custom format that doesn't match the line",
+			line:         "not a timestamp at all",
+			customLayout: "2006.01.02-15:04:05",
+			ok:           false,
+		},
 	}
 
 	// The December-rollover case needs a "now" in early January to trigger
@@ -79,7 +107,7 @@ func TestExtractTimestamp(t *testing.T) {
 				testNow = earlyJanNow
 			}
 
-			got, ok := extractTimestamp(c.line, testNow)
+			got, ok := extractTimestamp(c.line, testNow, c.customLayout)
 			if ok != c.ok {
 				t.Fatalf("extractTimestamp(%q) ok = %v, want %v", c.line, ok, c.ok)
 			}
