@@ -22,6 +22,15 @@ end of a pipe:
 journalctl -u myservice --since today | loggap --min-gap 1m
 ```
 
+A file argument ending in `.gz` is decompressed transparently:
+
+```
+loggap service.log.gz
+```
+
+(This only applies to a named file - gzip data piped in over stdin isn't
+detected, since there's no `.gz` extension to key off of.)
+
 ### Flags
 
 - `--min-gap DURATION` - smallest gap worth reporting (default `30s`).

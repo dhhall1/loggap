@@ -7,11 +7,13 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -76,7 +78,33 @@ func openInput(path string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", path, err)
 	}
+	if strings.HasSuffix(path, ".gz") {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			f.Close()
+			return nil, fmt.Errorf("opening %s: %w", path, err)
+		}
+		return &gzipFile{gz: gz, f: f}, nil
+	}
 	return f, nil
+}
+
+// gzipFile wraps a gzip.Reader together with the underlying file so Close
+// tears down both - closing just the gzip.Reader leaves the file descriptor
+// open.
+type gzipFile struct {
+	gz *gzip.Reader
+	f  *os.File
+}
+
+func (g *gzipFile) Read(p []byte) (int, error) { return g.gz.Read(p) }
+
+func (g *gzipFile) Close() error {
+	if err := g.gz.Close(); err != nil {
+		g.f.Close()
+		return err
+	}
+	return g.f.Close()
 }
 
 func scan(r io.Reader, path string, minGap time.Duration, customLayout string) (*report, error) {

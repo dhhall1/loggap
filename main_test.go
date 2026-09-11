@@ -1,7 +1,9 @@
 package main
 
 import (
+	"compress/gzip"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -113,6 +115,61 @@ func TestScanCustomFormat(t *testing.T) {
 	}
 	if g.Seconds != 899 {
 		t.Errorf("gap seconds = %v, want 899", g.Seconds)
+	}
+}
+
+func TestOpenInputGzip(t *testing.T) {
+	raw, err := os.ReadFile("testdata/service.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(t.TempDir(), "service.log.gz")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	if _, err := gz.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := openInput(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	rep, err := scan(r, path, 30*time.Second, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if rep.LinesScanned != 5 {
+		t.Errorf("LinesScanned = %d, want 5", rep.LinesScanned)
+	}
+	if len(rep.Gaps) != 1 {
+		t.Fatalf("len(Gaps) = %d, want 1", len(rep.Gaps))
+	}
+	if rep.Gaps[0].Seconds != 895 {
+		t.Errorf("gap seconds = %v, want 895", rep.Gaps[0].Seconds)
+	}
+}
+
+func TestOpenInputGzipInvalid(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bad.gz")
+	if err := os.WriteFile(path, []byte("not actually gzip data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := openInput(path); err == nil {
+		t.Fatal("openInput on a non-gzip .gz file: got nil error, want one")
 	}
 }
 
