@@ -43,6 +43,14 @@ detected, since there's no `.gz` extension to key off of.)
   never overrides them. If the layout has no year (like syslog), `loggap`
   assumes the current year and corrects for a log that rolled over a year
   boundary, the same way it does for the built-in syslog format.
+- `--since TIME` / `--until TIME` - ignore lines timestamped outside this
+  window. Accepts RFC3339 (`2024-03-01T09:00:00Z`), the same without a zone
+  (`2024-03-01T09:00:00`, `2024-03-01 09:00:00`), or a bare date
+  (`2024-03-01`, midnight UTC). Lines outside the window are skipped the
+  same way lines with no recognized timestamp are - they don't break the
+  gap calculation on either side of the window, they're just excluded from
+  it. Useful for narrowing a big log down to the incident window before
+  looking for gaps in it.
 
 ### Example
 

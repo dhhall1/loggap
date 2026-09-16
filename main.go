@@ -26,17 +26,40 @@ type gap struct {
 }
 
 type report struct {
-	File               string  `json:"file"`
-	MinGapSeconds      float64 `json:"min_gap_seconds"`
-	LinesScanned       int     `json:"lines_scanned"`
-	LinesWithTimestamp int     `json:"lines_with_timestamp"`
-	Gaps               []gap   `json:"gaps"`
+	File               string     `json:"file"`
+	MinGapSeconds      float64    `json:"min_gap_seconds"`
+	Since              *time.Time `json:"since,omitempty"`
+	Until              *time.Time `json:"until,omitempty"`
+	LinesScanned       int        `json:"lines_scanned"`
+	LinesWithTimestamp int        `json:"lines_with_timestamp"`
+	Gaps               []gap      `json:"gaps"`
+}
+
+// timeFlagLayouts are tried in order when parsing --since/--until. RFC3339
+// covers anything loggap itself would print; the rest are for typing a
+// window on the command line by hand without fussing over an offset.
+var timeFlagLayouts = []string{
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+}
+
+func parseTimeFlag(s string) (time.Time, error) {
+	for _, layout := range timeFlagLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("could not parse %q as a time (try RFC3339, e.g. 2024-03-01T09:00:00Z, or 2024-03-01)", s)
 }
 
 func main() {
 	jsonOutput := flag.Bool("json", false, "print results as JSON instead of plain text")
 	minGap := flag.Duration("min-gap", 30*time.Second, "smallest gap worth reporting (e.g. 30s, 5m)")
 	format := flag.String("format", "", "Go reference layout for logs that don't match a built-in timestamp format (e.g. \"2006-01-02 15:04:05\")")
+	since := flag.String("since", "", "ignore lines timestamped before this time (RFC3339, e.g. 2024-03-01T09:00:00Z, or 2024-03-01)")
+	until := flag.String("until", "", "ignore lines timestamped after this time (same formats as --since)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: loggap [flags] [file]\n\n")
 		fmt.Fprintf(os.Stderr, "Find gaps in time between consecutive timestamped log lines.\n")
@@ -50,6 +73,28 @@ func main() {
 		path = flag.Arg(0)
 	}
 
+	var sinceTime, untilTime *time.Time
+	if *since != "" {
+		t, err := parseTimeFlag(*since)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "loggap: --since: %v\n", err)
+			os.Exit(1)
+		}
+		sinceTime = &t
+	}
+	if *until != "" {
+		t, err := parseTimeFlag(*until)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "loggap: --until: %v\n", err)
+			os.Exit(1)
+		}
+		untilTime = &t
+	}
+	if sinceTime != nil && untilTime != nil && sinceTime.After(*untilTime) {
+		fmt.Fprintf(os.Stderr, "loggap: --since (%s) is after --until (%s)\n", sinceTime.Format(time.RFC3339), untilTime.Format(time.RFC3339))
+		os.Exit(1)
+	}
+
 	r, err := openInput(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "loggap: %v\n", err)
@@ -57,7 +102,7 @@ func main() {
 	}
 	defer r.Close()
 
-	rep, err := scan(r, path, *minGap, *format)
+	rep, err := scan(r, path, *minGap, *format, sinceTime, untilTime)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "loggap: %v\n", err)
 		os.Exit(1)
@@ -107,10 +152,12 @@ func (g *gzipFile) Close() error {
 	return g.f.Close()
 }
 
-func scan(r io.Reader, path string, minGap time.Duration, customLayout string) (*report, error) {
+func scan(r io.Reader, path string, minGap time.Duration, customLayout string, since, until *time.Time) (*report, error) {
 	rep := &report{
 		File:          path,
 		MinGapSeconds: minGap.Seconds(),
+		Since:         since,
+		Until:         until,
 		Gaps:          []gap{},
 	}
 
@@ -132,6 +179,12 @@ func scan(r io.Reader, path string, minGap time.Duration, customLayout string) (
 
 		t, ok := extractTimestamp(line, now, customLayout)
 		if !ok {
+			continue
+		}
+		if since != nil && t.Before(*since) {
+			continue
+		}
+		if until != nil && t.After(*until) {
 			continue
 		}
 		rep.LinesWithTimestamp++
@@ -169,6 +222,10 @@ func printJSON(rep *report) {
 }
 
 func printText(rep *report) {
+	if rep.Since != nil || rep.Until != nil {
+		fmt.Printf("window: %s -> %s\n", formatWindowBound(rep.Since), formatWindowBound(rep.Until))
+	}
+
 	if len(rep.Gaps) == 0 {
 		fmt.Printf("%s: no gaps >= %s across %d timestamped lines (of %d scanned)\n",
 			rep.File, time.Duration(rep.MinGapSeconds*float64(time.Second)), rep.LinesWithTimestamp, rep.LinesScanned)
@@ -185,4 +242,11 @@ func printText(rep *report) {
 	fmt.Printf("\n%d gap(s) >= %s, %d/%d lines had a recognized timestamp\n",
 		len(rep.Gaps), time.Duration(rep.MinGapSeconds*float64(time.Second)),
 		rep.LinesWithTimestamp, rep.LinesScanned)
+}
+
+func formatWindowBound(t *time.Time) string {
+	if t == nil {
+		return "(none)"
+	}
+	return t.Format(time.RFC3339)
 }
