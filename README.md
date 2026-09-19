@@ -88,9 +88,21 @@ $ loggap --min-gap 30s --json service.log
       "to": "2024-03-01T09:14:57Z",
       "seconds": 895
     }
+  ],
+  "histogram": [
+    {
+      "min_seconds": 480,
+      "count": 1
+    }
   ]
 }
 ```
+
+`histogram` buckets gap sizes into powers of two starting at `--min-gap`
+(30s, 60s, 120s, ... in the example above), so the shape of the
+distribution is visible at a glance regardless of whether the gaps in a
+log run from seconds to days. Buckets with no gaps in them are omitted.
+The last bucket present has no `max_seconds` - it's unbounded above.
 
 The JSON mode is meant for piping into `jq` or feeding to another tool -
 the text mode is meant for reading at a terminal while chasing down an

@@ -26,13 +26,14 @@ type gap struct {
 }
 
 type report struct {
-	File               string     `json:"file"`
-	MinGapSeconds      float64    `json:"min_gap_seconds"`
-	Since              *time.Time `json:"since,omitempty"`
-	Until              *time.Time `json:"until,omitempty"`
-	LinesScanned       int        `json:"lines_scanned"`
-	LinesWithTimestamp int        `json:"lines_with_timestamp"`
-	Gaps               []gap      `json:"gaps"`
+	File               string       `json:"file"`
+	MinGapSeconds      float64      `json:"min_gap_seconds"`
+	Since              *time.Time   `json:"since,omitempty"`
+	Until              *time.Time   `json:"until,omitempty"`
+	LinesScanned       int          `json:"lines_scanned"`
+	LinesWithTimestamp int          `json:"lines_with_timestamp"`
+	Gaps               []gap        `json:"gaps"`
+	Histogram          []histBucket `json:"histogram"`
 }
 
 // timeFlagLayouts are tried in order when parsing --since/--until. RFC3339
@@ -210,6 +211,7 @@ func scan(r io.Reader, path string, minGap time.Duration, customLayout string, s
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 
+	rep.Histogram = buildHistogram(rep.Gaps, minGap)
 	return rep, nil
 }
 
